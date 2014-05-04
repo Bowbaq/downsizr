@@ -96,6 +96,7 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 
 	response := Response{base_64_encode(data, content_type)}
 
+	res.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(res)
 	err = encoder.Encode(response)
 	if err != nil {
