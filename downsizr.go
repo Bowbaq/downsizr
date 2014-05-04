@@ -1,19 +1,22 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"image"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"time"
-  "fmt"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -45,11 +48,12 @@ func main() {
 type Request struct {
 	ImageURL string
 
-	Height int
-	Width  int
+	Height uint
+	Width  uint
 }
 
 type Response struct {
+	Resized string
 }
 
 func downsize(res http.ResponseWriter, req *http.Request) {
@@ -61,38 +65,60 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-  fmt.Printf("%v\n", request)
-
-	img, err := download_image(request.ImageURL)
+	img, content_type, err := download_image(request.ImageURL)
 	if err != nil {
 		log.Println(err)
-		http.Error(res, err.Error(), http.StatusBadRequest)
+		http.Error(res, "error downloading image: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	resize.Resize(1000, 0, *img, resize.Lanczos3)
+	resized := resize.Resize(request.Width, request.Height, *img, resize.Lanczos3)
+	data, err := encode_img(resized, content_type)
+	if err != nil {
+		log.Println(err)
+		http.Error(res, "error encoding resized image: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response := Response{base_64_encode(data, content_type)}
+	encoder := json.NewEncoder(res)
+	err = encoder.Encode(response)
+	if err != nil {
+		log.Println(err)
+		http.Error(res, "error encoding response: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 }
 
-func download_image(url string) (*image.Image, error) {
+func download_image(url string) (*image.Image, string, error) {
 	res, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer res.Body.Close()
 
-	img_encoding := res.Header.Get("Content-Type")
+	content_type := res.Header.Get("Content-Type")
+	img, err := decode_img(res.Body, content_type)
 
-	var img image.Image
-	switch img_encoding {
+	return img, content_type, err
+}
+
+func decode_img(data io.ReadCloser, content_type string) (*image.Image, error) {
+	var (
+		img image.Image
+		err error
+	)
+
+	switch content_type {
 	case "image/jpeg":
-		img, err = jpeg.Decode(res.Body)
+		img, err = jpeg.Decode(data)
 	case "image/gif":
-		img, err = gif.Decode(res.Body)
+		img, err = gif.Decode(data)
 	case "image/png":
-		img, err = png.Decode(res.Body)
+		img, err = png.Decode(data)
 
 	default:
-		err = errors.New("Unknown encoding " + img_encoding)
+		err = errors.New("Unknown content type " + content_type)
 	}
 
 	if err != nil {
@@ -101,6 +127,37 @@ func download_image(url string) (*image.Image, error) {
 	}
 
 	return &img, nil
+}
+
+func encode_img(img image.Image, content_type string) ([]byte, error) {
+	var (
+		buffer bytes.Buffer
+		err    error
+	)
+
+	switch content_type {
+	case "image/jpeg":
+		err = jpeg.Encode(&buffer, img, nil)
+	case "image/gif":
+		err = gif.Encode(&buffer, img, nil)
+	case "image/png":
+		err = png.Encode(&buffer, img)
+
+	default:
+		err = errors.New("Unknown content type " + content_type)
+	}
+
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func base_64_encode(data []byte, content_type string) string {
+	return fmt.Sprintf("data:%s;base64,%s",
+		content_type, base64.StdEncoding.EncodeToString(data))
 }
 
 func TimingHandler(handler http.Handler) http.Handler {
