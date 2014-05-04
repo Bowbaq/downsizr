@@ -1,1 +1,1 @@
-web: downsizr -port $PORT -graphite-api-key $HOSTEDGRAPHITE_APIKEY
+web: downsizr -port=$PORT -graphite_api_key=$HOSTEDGRAPHITE_APIKEY
