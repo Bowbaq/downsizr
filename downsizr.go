@@ -53,7 +53,7 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 	var request Request
 	if err := decoder.Decode(&request); err != nil {
 		log.Println(err)
-		http.Error(res, "malformed request", http.StatusBadRequest)
+		http.Error(res, "malformed request: " + err.Error(), http.StatusBadRequest)
 		return
 	}
 
