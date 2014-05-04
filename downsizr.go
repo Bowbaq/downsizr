@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"time"
+  "fmt"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -59,6 +60,8 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, "malformed request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+
+  fmt.Printf("%v\n", request)
 
 	img, err := download_image(request.ImageURL)
 	if err != nil {
