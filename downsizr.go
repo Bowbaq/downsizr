@@ -12,7 +12,6 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/nfnt/resize"
 )
 
 var (
@@ -53,6 +52,8 @@ type Request struct {
 
 	Height uint
 	Width  uint
+
+	Algorithm string
 }
 
 type Response struct {
@@ -82,7 +83,7 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 	img, err := decode_img(data, content_type)
 	graphite.Send("decode_img", time.Since(start).Nanoseconds())
 
-	resized := resize.Resize(request.Width, request.Height, *img, resize.Lanczos3)
+	resized := resize_img(&request, img)
 	graphite.Send("resize_img", time.Since(start).Nanoseconds())
 
 	data, err = encode_img(resized, content_type)

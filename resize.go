@@ -10,7 +10,31 @@ import (
 	"image/jpeg"
 	"image/png"
 	"log"
+
+	"github.com/nfnt/resize"
 )
+
+func resize_img(req *Request, img *image.Image) image.Image {
+	var algorithm resize.InterpolationFunction
+	switch req.Algorithm {
+	case "NearestNeighbor":
+		algorithm = resize.NearestNeighbor
+	case "Bilinear":
+		algorithm = resize.Bilinear
+	case "Bicubic":
+		algorithm = resize.Bicubic
+	case "MitchellNetravali":
+		algorithm = resize.MitchellNetravali
+	case "Lanczos2":
+		algorithm = resize.Lanczos2
+	case "Lanczos3":
+		algorithm = resize.Lanczos3
+	default:
+		algorithm = resize.Lanczos3
+	}
+
+	return resize.Resize(req.Width, req.Height, *img, algorithm)
+}
 
 func decode_img(data []byte, content_type string) (*image.Image, error) {
 	var (

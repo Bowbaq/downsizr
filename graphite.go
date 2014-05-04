@@ -43,7 +43,6 @@ func (graphite *HostedGraphite) connect() error {
 
 func (graphite *HostedGraphite) sendMetric(metric Metric) error {
 	payload := fmt.Sprintf("%s.%s %v %d\n", graphite.APIKey, metric.name, metric.value, metric.timestamp.Unix())
-	log.Println("Sending metric", payload)
 	_, err := graphite.conn.Write([]byte(payload))
 	if err != nil {
 		log.Println("Error recording metric", payload, err)
