@@ -1,17 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"flag"
-	"fmt"
-	"image"
-	"image/gif"
-	"image/jpeg"
-	"image/png"
-	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -24,15 +16,24 @@ import (
 )
 
 var (
-	port string
+	port             string
+	graphite_api_key string
+	graphite         *HostedGraphite
 )
 
 func init() {
 	flag.StringVar(&port, "port", "8080", "HTTP bind port")
+	flag.StringVar(&graphite_api_key, "graphite-api-key", "", "Hosted Graphite API key")
 }
 
 func main() {
 	flag.Parse()
+
+	var err error
+	graphite, err = NewHostedGraphite(graphite_api_key)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	router := mux.NewRouter()
 	router.HandleFunc("/resize", downsize).Methods("POST")
@@ -57,6 +58,8 @@ type Response struct {
 }
 
 func downsize(res http.ResponseWriter, req *http.Request) {
+	start := time.Now()
+
 	decoder := json.NewDecoder(req.Body)
 	var request Request
 	if err := decoder.Decode(&request); err != nil {
@@ -64,23 +67,32 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, "malformed request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	graphite.Send("parse_request", time.Since(start).Nanoseconds())
 
-	img, content_type, err := download_image(request.ImageURL)
+	data, content_type, err := download_image(request.ImageURL)
 	if err != nil {
 		log.Println(err)
 		http.Error(res, "error downloading image: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	graphite.Send("download_image", time.Since(start).Nanoseconds())
+
+	img, err := decode_img(data, content_type)
+	graphite.Send("decode_img", time.Since(start).Nanoseconds())
 
 	resized := resize.Resize(request.Width, request.Height, *img, resize.Lanczos3)
-	data, err := encode_img(resized, content_type)
+	graphite.Send("resize_img", time.Since(start).Nanoseconds())
+
+	data, err = encode_img(resized, content_type)
 	if err != nil {
 		log.Println(err)
 		http.Error(res, "error encoding resized image: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	graphite.Send("encode_img", time.Since(start).Nanoseconds())
 
 	response := Response{base_64_encode(data, content_type)}
+
 	encoder := json.NewEncoder(res)
 	err = encoder.Encode(response)
 	if err != nil {
@@ -88,76 +100,23 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, "error encoding response: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	graphite.Send("write_response", time.Since(start).Nanoseconds())
 }
 
-func download_image(url string) (*image.Image, string, error) {
+func download_image(url string) ([]byte, string, error) {
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, "", err
 	}
 	defer res.Body.Close()
 
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
 	content_type := res.Header.Get("Content-Type")
-	img, err := decode_img(res.Body, content_type)
-
-	return img, content_type, err
-}
-
-func decode_img(data io.ReadCloser, content_type string) (*image.Image, error) {
-	var (
-		img image.Image
-		err error
-	)
-
-	switch content_type {
-	case "image/jpeg":
-		img, err = jpeg.Decode(data)
-	case "image/gif":
-		img, err = gif.Decode(data)
-	case "image/png":
-		img, err = png.Decode(data)
-
-	default:
-		err = errors.New("Unknown content type " + content_type)
-	}
-
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	return &img, nil
-}
-
-func encode_img(img image.Image, content_type string) ([]byte, error) {
-	var (
-		buffer bytes.Buffer
-		err    error
-	)
-
-	switch content_type {
-	case "image/jpeg":
-		err = jpeg.Encode(&buffer, img, nil)
-	case "image/gif":
-		err = gif.Encode(&buffer, img, nil)
-	case "image/png":
-		err = png.Encode(&buffer, img)
-
-	default:
-		err = errors.New("Unknown content type " + content_type)
-	}
-
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-
-	return buffer.Bytes(), nil
-}
-
-func base_64_encode(data []byte, content_type string) string {
-	return fmt.Sprintf("data:%s;base64,%s",
-		content_type, base64.StdEncoding.EncodeToString(data))
+	return data, content_type, nil
 }
 
 func TimingHandler(handler http.Handler) http.Handler {
