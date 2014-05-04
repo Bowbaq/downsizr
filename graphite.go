@@ -15,7 +15,7 @@ type HostedGraphite struct {
 }
 
 func NewHostedGraphite(api_key string) (*HostedGraphite, error) {
-	graphite := &HostedGraphite{Host: "carbon.hostedgraphite.com", Port: 2003}
+	graphite := &HostedGraphite{Host: "carbon.hostedgraphite.com", Port: 2003, APIKey: api_key}
 	err := graphite.connect()
 	if err != nil {
 		return nil, err
