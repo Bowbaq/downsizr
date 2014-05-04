@@ -18,12 +18,13 @@ import (
 var (
 	port             string
 	graphite_api_key string
-	graphite         *HostedGraphite
+
+	graphite *HostedGraphite
 )
 
 func init() {
 	flag.StringVar(&port, "port", "8080", "HTTP bind port")
-	flag.StringVar(&graphite_api_key, "graphite-api-key", "", "Hosted Graphite API key")
+	flag.StringVar(&graphite_api_key, "graphite_api_key", "", "Hosted Graphite API key")
 }
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	log.Println("Hosted Graphite adapter connected", graphite.Host, graphite.Port)
 
 	router := mux.NewRouter()
 	router.HandleFunc("/resize", downsize).Methods("POST")
