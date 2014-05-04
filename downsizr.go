@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"time"
+  "errors"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -61,6 +62,7 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Println(err)
 		http.Error(res, err.Error(), http.StatusBadRequest)
+    return
 	}
 
 	resize.Resize(1000, 0, *img, resize.Lanczos3)
@@ -81,10 +83,11 @@ func download_image(url string) (*image.Image, error) {
 		img, err = jpeg.Decode(res.Body)
 
 	default:
-		log.Println("Unknown encoding", img_encoding)
+    err = errors.New("Unknown encoding " + img_encoding)
 	}
 
 	if err != nil {
+    log.Println(err)
 		return nil, err
 	}
 
