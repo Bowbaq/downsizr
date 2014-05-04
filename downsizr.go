@@ -2,15 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"image"
+	"image/gif"
 	"image/jpeg"
+	"image/png"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"time"
-  "errors"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -54,7 +56,7 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 	var request Request
 	if err := decoder.Decode(&request); err != nil {
 		log.Println(err)
-		http.Error(res, "malformed request: " + err.Error(), http.StatusBadRequest)
+		http.Error(res, "malformed request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -62,7 +64,7 @@ func downsize(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		log.Println(err)
 		http.Error(res, err.Error(), http.StatusBadRequest)
-    return
+		return
 	}
 
 	resize.Resize(1000, 0, *img, resize.Lanczos3)
@@ -81,13 +83,17 @@ func download_image(url string) (*image.Image, error) {
 	switch img_encoding {
 	case "image/jpeg":
 		img, err = jpeg.Decode(res.Body)
+	case "image/gif":
+		img, err = gif.Decode(res.Body)
+	case "image/png":
+		img, err = png.Decode(res.Body)
 
 	default:
-    err = errors.New("Unknown encoding " + img_encoding)
+		err = errors.New("Unknown encoding " + img_encoding)
 	}
 
 	if err != nil {
-    log.Println(err)
+		log.Println(err)
 		return nil, err
 	}
 
